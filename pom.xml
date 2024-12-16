@@ -1,0 +1,44 @@
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <groupId>com.t13max.wxbot</groupId>
+    <artifactId>t13max-wxbot</artifactId>
+    <version>1.0.0</version>
+    <packaging>pom</packaging>
+
+    <name>t13max-wxbot</name>
+    <url>http://maven.apache.org</url>
+    <modules>
+        <module>t13max-wxbot-core</module>
+        <module>t13max-wxbot-api</module>
+    </modules>
+
+    <properties>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <t13max.version>1.0.1</t13max.version>
+        <lombok.version>1.18.30</lombok.version>
+        <log4j.version>2.17.2</log4j.version>
+        <fastjson.version>1.2.69</fastjson.version>
+        <httpmime.version>4.5.14</httpmime.version>
+    </properties>
+
+    <dependencies>
+        <dependency>
+            <groupId>org.projectlombok</groupId>
+            <artifactId>lombok</artifactId>
+            <version>${lombok.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.logging.log4j</groupId>
+            <artifactId>log4j-api</artifactId>
+            <version>${log4j.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.logging.log4j</groupId>
+            <artifactId>log4j-core</artifactId>
+            <version>${log4j.version}</version>
+        </dependency>
+
+    </dependencies>
+</project>
