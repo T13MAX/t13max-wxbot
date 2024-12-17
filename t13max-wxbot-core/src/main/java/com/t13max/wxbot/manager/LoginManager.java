@@ -2,10 +2,7 @@ package com.t13max.wxbot.manager;
 
 import com.t13max.common.manager.ManagerBase;
 import com.t13max.wxbot.Robot;
-import com.t13max.wxbot.consts.StorageLoginInfoEnum;
-import com.t13max.wxbot.consts.WxReqParamsConstant;
-import com.t13max.wxbot.consts.WxRespConstant;
-import com.t13max.wxbot.consts.WxURLEnum;
+import com.t13max.wxbot.consts.*;
 import com.t13max.wxbot.dto.request.*;
 import com.t13max.wxbot.dto.response.wxinit.WxInitResponse;
 import com.t13max.wxbot.entity.Contacts;
@@ -140,11 +137,14 @@ public class LoginManager extends ManagerBase {
                         String redirectUrl = processQRScanInfo(robot, result);
                         doLogin(robot, redirectUrl);
                         isLogin = true;
-                        robot.setAlive(true);
+                        robot.changeStatus(RobotStatusEnum.LOGIN);
                         break while1;
                     }
-                    case CANCEL, NONE, WAIT_SCAN, WAIT_CONFIRM -> {
+                    case WAIT_SCAN, WAIT_CONFIRM -> {
                         log.info(codeEnum.getMsg());
+                    }
+                    case CANCEL, NONE -> {
+                        robot.changeStatus(RobotStatusEnum.IDLE);
                     }
                 }
             } catch (Exception e) {
@@ -278,7 +278,6 @@ public class LoginManager extends ManagerBase {
      * @Date 15:10 2024/12/16
      */
     public boolean webWxInit(Robot robot) {
-        robot.setAlive(true);
         robot.setLastNormalRetCodeTime(System.currentTimeMillis());
         // 组装请求URL和参数
         String url = String.format(WxURLEnum.INIT_URL.getUrl(),

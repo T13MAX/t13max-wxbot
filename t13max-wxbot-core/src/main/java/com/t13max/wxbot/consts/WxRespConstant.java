@@ -121,35 +121,24 @@ public interface WxRespConstant {
      */
     @Getter
     enum WXReceiveMsgCodeEnum {
-
-        UNKNOWN(0, "未知消息类型"),
-        MSGTYPE_TEXT(1, "文本消息类型"),
-        MSGTYPE_IMAGE(3, "图片消息"),
-        MSGTYPE_VOICE(34, "语音消息"),
-        MSGTYPE_VIDEO(43, "小视频消息"),
-        MSGTYPE_MICROVIDEO(62, "短视频消息"),
-        MSGTYPE_EMOTICON(47, "表情消息"),
-        MSGTYPE_APP(49, "APP消息"),
-        MSGTYPE_VOIPMSG(50, ""),
-        MSGTYPE_VOIPNOTIFY(52, ""),
-        MSGTYPE_VOIPINVITE(53, ""),
-        MSGTYPE_LOCATION(48, ""),
-        MSGTYPE_STATUSNOTIFY(51, "系统通知"),
-        MSGTYPE_SYSNOTICE(9999, ""),
-        MSGTYPE_POSSIBLEFRIEND_MSG(40, ""),
-        MSGTYPE_VERIFYMSG(37, "好友请求消息"),
-        MSGTYPE_SHARECARD(42, "名片分享消息"),
-        MSGTYPE_SYS(10000, "系统消息"),
-        MSGTYPE_RECALLED(10002, "撤回消息"),
-        /**
-         * 自定义的几种类型
-         */
-
-        MSGTYPE_MAP(8888, "地图消息"),
+        MSG_TYPE_UNKNOWN(0, "未知消息类型"),
+        MSG_TYPE_TEXT(1, "文本消息类型"),
+        MSG_TYPE_IMAGE(3, "图片消息"),
+        MSG_TYPE_VOICE(34, "语音消息"),
+        MSG_TYPE_VIDEO(43, "小视频消息"),
+        MSG_TYPE_MICROVIDEO(62, "短视频消息"),
+        MSG_TYPE_EMOTICON(47, "表情消息"),
+        MSG_TYPE_APP(49, "APP消息"),
+        MSG_TYPE_LOCATION(48, "位置信息"),
+        MSG_TYPE_STATUSNOTIFY(51, "系统通知"),
+        MSG_TYPE_VERIFYMSG(37, "好友请求消息"),
+        MSG_TYPE_SHARECARD(42, "名片分享消息"),
+        MSG_TYPE_SYS(10000, "系统消息"),
+        MSG_TYPE_RECALLED(10002, "撤回消息"),
         ;
 
-        private int code;
-        private String desc;
+        private final int code;
+        private final String desc;
 
         WXReceiveMsgCodeEnum(int code, String desc) {
             this.code = code;
@@ -162,90 +151,9 @@ public interface WxRespConstant {
                     return value;
                 }
             }
-            return UNKNOWN;
+            return MSG_TYPE_UNKNOWN;
         }
 
     }
 
-    /**
-     * APP消息的子类型
-     *
-     * @Author t13max
-     * @Date 15:01 2024/12/16
-     */
-    enum WXReceiveMsgCodeOfAppEnum {
-        OTHER(0, "未知消息"),
-        LINK(5, "链接消息"),
-        PROGRAM(33, "小程序消息"),
-        MUSIC(3, "分享的音乐"),
-        PICTURE(8, "搜狗输入法"),
-        TRANSFER(2000, "转账"),
-        FILE(6, "文件消息");
-        private int type;
-        private String code;
-
-        WXReceiveMsgCodeOfAppEnum(int type, String code) {
-            this.type = type;
-            this.code = code;
-        }
-
-        public static WXReceiveMsgCodeOfAppEnum getByCode(int type) {
-            for (WXReceiveMsgCodeOfAppEnum value : WXReceiveMsgCodeOfAppEnum.values()) {
-                if (value.type == type) {
-                    return value;
-                }
-            }
-            return OTHER;
-        }
-
-        public int getType() {
-            return type;
-        }
-
-        public String getCode() {
-            return code;
-        }
-
-    }
-
-    /**
-     * 系统通知类型
-     *
-     * @Author t13max
-     * @Date 15:01 2024/12/16
-     */
-    enum WXReceiveMsgStatusNotifyCodeEnum {
-        READED(1, "已读"),
-        ENTER_SESSION(2, "进入会话"),
-        INITED(3, "sync mobile chatList"),
-        SYNC_CONV(4, "会话同步"),
-        QUIT_SESSION(5, "退出会话"),
-        DEFAULT(0, "未知");
-
-        private int code;
-        private String desc;
-
-        WXReceiveMsgStatusNotifyCodeEnum(int code, String desc) {
-            this.code = code;
-            this.desc = desc;
-        }
-
-        public static WXReceiveMsgStatusNotifyCodeEnum getByCode(int code) {
-            for (WXReceiveMsgStatusNotifyCodeEnum value : WXReceiveMsgStatusNotifyCodeEnum.values()) {
-                if (value.code == code) {
-                    return value;
-                }
-            }
-            return DEFAULT;
-        }
-
-        public int getCode() {
-            return code;
-        }
-
-        public String getDesc() {
-            return desc;
-        }
-
-    }
 }

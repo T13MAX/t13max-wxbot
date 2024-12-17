@@ -1,6 +1,5 @@
 package com.t13max.wxbot;
 
-import com.t13max.wxbot.entity.Contacts;
 import com.t13max.wxbot.entity.Message;
 
 import java.awt.image.BufferedImage;
@@ -19,8 +18,6 @@ public interface IRobot {
     //注册消息监听
     void register(MessageHandler messageHandler);
 
-    //登录成功回调
-    void loginCallBack(ICallBack callBack);
-
+    //发送一个消息
     void sendMsg(Message message);
 }

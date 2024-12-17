@@ -57,16 +57,13 @@ public class MessageTools {
                 String content = XmlStreamUtil.formatXml(message.getContent());
                 WxRespConstant.WXReceiveMsgCodeEnum byCode = WxRespConstant.WXReceiveMsgCodeEnum.getByCode(message.getMsgType());
                 switch (byCode) {
-                    case MSGTYPE_TEXT:
+                    case MSG_TYPE_TEXT:
                         sendMsgResponse = sendTextMsgByUserId(robot, content, toUserName);
                         break;
-                    case MSGTYPE_MAP:
-                        sendMsgResponse = sendMapMsgByUserId(robot, toUserName, content);
-                        break;
-                    case MSGTYPE_SHARECARD:
+                    case MSG_TYPE_SHARECARD:
                         sendMsgResponse = sendCardMsgByUserId(robot, toUserName, content);
                         break;
-                    case MSGTYPE_IMAGE, MSGTYPE_VIDEO, MSGTYPE_EMOTICON:
+                    case MSG_TYPE_IMAGE, MSG_TYPE_VIDEO, MSG_TYPE_EMOTICON:
                     default:
                         Log.msg.error("不支持的类型");
                 }
@@ -315,36 +312,4 @@ public class MessageTools {
         return raw;
     }
 
-    /**
-     * 将 卡片消息的xml提取到各个字段
-     *
-     * @param content xml
-     * @param message 消息
-     */
-    public static Map<String, Object> setMessageCardField(String content, Message message) {
-        Map<String, Object> map = new HashMap<>();
-        try {
-            map = XmlStreamUtil.toMap(content);
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-        Object title = map.get("msg.attr.nickname");
-        Object thumbUrl = map.get("msg.attr.smallheadimgurl");
-        Object headImgUrl = map.get("msg.attr.bigheadimgurl");
-        Object id = map.get("msg.attr.alias");
-        Object province = map.get("msg.attr.province");
-        Object city = map.get("msg.attr.city");
-        Object sex = map.get("msg.attr.sex");
-        Object userName = map.get("msg.attr.username");
-
-        message.setContactsNickName(title == null ? null : title.toString());
-        message.setContactsId(id == null ? null : id.toString());
-        message.setContactsProvince(province == null ? null : province.toString());
-        message.setContactsCity(city == null ? null : city.toString());
-        message.setContactsSex(sex == null ? null : Byte.valueOf(sex.toString()));
-        message.setThumbUrl(thumbUrl == null ? null : thumbUrl.toString());
-        message.setContactsUserName(userName == null ? null : userName.toString());
-        message.setContactsHeadImgUrl(headImgUrl == null ? null : headImgUrl.toString());
-        return map;
-    }
 }

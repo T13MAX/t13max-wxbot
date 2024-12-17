@@ -19,27 +19,25 @@ import java.util.Objects;
 @NoArgsConstructor
 @AllArgsConstructor
 public class Contacts {
+    //用户名
     private String username;
-
+    //昵称
     private String nickname;
-
+    //签名
     private String signature;
-
+    //性别
     private Byte sex;
-
+    //备注名
     private String remarkname;
-
+    //省份
     private String province;
-
+    //城市
     private String city;
-
+    //chatroomid
     private Double chatroomid;
-
+    //attrstatus
     private Double attrstatus;
-
-    /**
-     * 等于0消息免打扰 1正常
-     */
+    // 0消息免打扰 1正常
     private Double statues;
 
     private String pyquanpin;

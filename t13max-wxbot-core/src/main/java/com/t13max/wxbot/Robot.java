@@ -1,18 +1,21 @@
 package com.t13max.wxbot;
 
-import com.t13max.wxbot.consts.PhaseEnum;
+import com.t13max.common.event.GameEventBus;
+import com.t13max.wxbot.consts.RobotStatusEnum;
 import com.t13max.wxbot.entity.Contacts;
 import com.t13max.wxbot.entity.LoginResultData;
 import com.t13max.wxbot.entity.Message;
+import com.t13max.wxbot.event.LoginSuccessEvent;
+import com.t13max.wxbot.event.QrSuccessEvent;
 import com.t13max.wxbot.exception.RobotException;
-import com.t13max.wxbot.manager.CallBackManager;
 import com.t13max.wxbot.manager.ContactsManager;
 import com.t13max.wxbot.manager.LoginManager;
 import com.t13max.wxbot.manager.MessageManager;
 import com.t13max.wxbot.tools.MessageTools;
-import com.t13max.wxbot.utils.ExecutorServiceUtil;
 import com.t13max.wxbot.utils.SleepUtils;
 import lombok.Data;
+import lombok.Getter;
+import lombok.Setter;
 
 import java.awt.image.BufferedImage;
 import java.util.Map;
@@ -24,10 +27,11 @@ import java.util.concurrent.CopyOnWriteArraySet;
  * @author t13max
  * @since 14:22 2024/12/16
  */
-@Data
+@Getter
+@Setter
 public class Robot implements IRobot {
 
-    private volatile boolean alive = false;
+    private volatile RobotStatusEnum statusEnum = RobotStatusEnum.IDLE;
     private String uuid = null;
     private String userName;
     private String nickName;
@@ -49,8 +53,47 @@ public class Robot implements IRobot {
     public Robot() {
     }
 
+    public void tick() {
+
+        try {
+            doTick();
+        } catch (Exception e) {
+            e.printStackTrace();
+        } finally {
+
+        }
+
+    }
+
+    private void doTick() throws Exception {
+        switch (statusEnum) {
+            case IDLE -> {
+                //刚创建完 空闲状态 啥也不干
+            }
+            case QR -> {
+                //尝试获取二维码
+            }
+            case PRE_LOGIN -> {
+                //获取了二维码 等待扫描
+                LoginManager.inst().preLogin(this);
+                changeStatus(RobotStatusEnum.LOGIN);
+                GameEventBus.inst().postEvent(new QrSuccessEvent());
+            }
+            case LOGIN -> {
+                LoginManager.inst().webWxInit(this);
+                ContactsManager.inst().webWxGetContact(this);
+                ContactsManager.inst().WebWxBatchGetContact(this);
+                changeStatus(RobotStatusEnum.RUNNING);
+                GameEventBus.inst().postEvent(new LoginSuccessEvent());
+            }
+            case RUNNING -> {
+                MessageManager.inst().startReceiving(this);
+            }
+        }
+    }
+
     @Override
-    public BufferedImage getQR() throws Exception {
+    public BufferedImage getQR() {
         int count = 0;
         while (count++ < 100) {
             String uuid = LoginManager.inst().getUuid(this);
@@ -63,40 +106,24 @@ public class Robot implements IRobot {
             return null;
         }
 
-        //优化!
-
         BufferedImage bufferedImage = LoginManager.inst().getQR(this);
 
-        ExecutorServiceUtil.getGlobalExecutorService().execute(() -> {
-            try {
-                LoginManager.inst().preLogin(this);
-                LoginManager.inst().webWxInit(this);
-                ContactsManager.inst().webWxGetContact(this);
-                MessageManager.inst().startReceiving(this);
-                ContactsManager.inst().WebWxBatchGetContact(this);
-            } catch (Exception e) {
-                throw new RuntimeException(e);
-            }
-        });
+        changeStatus(RobotStatusEnum.PRE_LOGIN);
 
         return bufferedImage;
     }
 
     @Override
     public void register(MessageHandler messageHandler) {
-        if (alive) {
-            throw new RobotException("登录状态禁止注册监听");
-        }
         MessageManager.inst().register(this, messageHandler);
-    }
-
-    @Override
-    public void loginCallBack(ICallBack callBack) {
-        CallBackManager.inst().addCallBack(this, PhaseEnum.LOGIN_SUCCESS, callBack);
     }
 
     @Override
     public void sendMsg(Message message) {
         MessageTools.sendMsgByUserId(this, message);
+    }
+
+    public void changeStatus(RobotStatusEnum statusEnum) {
+        this.statusEnum = statusEnum;
     }
 }

@@ -20,7 +20,6 @@ import java.util.stream.Collectors;
 @Log4j2
 public class ContactsTools {
 
-
     /**
      * 根据用户名获取用户信息
      *

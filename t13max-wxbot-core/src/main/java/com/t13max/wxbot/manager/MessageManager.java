@@ -3,28 +3,29 @@ package com.t13max.wxbot.manager;
 import com.alibaba.fastjson.JSON;
 import com.t13max.common.manager.ManagerBase;
 import com.t13max.common.util.Log;
+import com.t13max.util.TimeUtil;
 import com.t13max.wxbot.MessageHandler;
 import com.t13max.wxbot.Robot;
+import com.t13max.wxbot.consts.RobotStatusEnum;
 import com.t13max.wxbot.consts.WxReqParamsConstant;
 import com.t13max.wxbot.consts.WxRespConstant;
 import com.t13max.wxbot.consts.WxURLEnum;
 import com.t13max.wxbot.dto.request.WxSyncReq;
 import com.t13max.wxbot.dto.response.SyncCheckResp;
+import com.t13max.wxbot.dto.response.msg.send.WebWXSendMsgResponse;
 import com.t13max.wxbot.dto.response.sync.AddMsgList;
-import com.t13max.wxbot.dto.response.sync.RecommendInfo;
 import com.t13max.wxbot.dto.response.sync.WebWxSyncResp;
 import com.t13max.wxbot.entity.Contacts;
 import com.t13max.wxbot.entity.Message;
 import com.t13max.wxbot.exception.RobotException;
 import com.t13max.wxbot.tools.ContactsTools;
-import com.t13max.wxbot.tools.MessageTools;
 import com.t13max.wxbot.utils.*;
-import org.apache.commons.lang3.StringUtils;
 import org.apache.http.Consts;
 import org.apache.http.HttpEntity;
 import org.apache.http.message.BasicNameValuePair;
 import org.apache.http.util.EntityUtils;
 
+import java.time.LocalDateTime;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
@@ -112,55 +113,33 @@ public class MessageManager extends ManagerBase {
     }
 
     public void startReceiving(Robot robot) {
-        robot.setAlive(true);
-        Runnable runnable = () -> {
-            while (robot.isAlive()) {
-                try {
-
-                    //检测是否有新消息
-                    SyncCheckResp syncCheckResp = syncCheck(robot);
-                    WxRespConstant.SyncCheckRetCodeEnum syncCheckRetCodeEnum = WxRespConstant.SyncCheckRetCodeEnum.getByCode(syncCheckResp.getRetCode());
-                    switch (syncCheckRetCodeEnum) {
-
-                        case SUCCESS: {
-                            processSuccessMsg(robot, syncCheckResp.getSelector());
-                            break;
-                        }
-                        case UNKOWN: {
-                            Log.msg.info(syncCheckRetCodeEnum.getType());
-                            continue;
-                        }
-                        case LOGIN_OUT:
-                        case LOGIN_OTHERWHERE: {
-                            Log.msg.warn(syncCheckRetCodeEnum.getType());
-                            //重启客户端
-                            //WeChatStater.restartApplication();
-                            break;
-                        }
-                        case TICKET_ERROR:
-                        case PARAM_ERROR:
-                        case NOT_LOGIN_WARN:
-                        case LOGIN_ENV_ERROR:
-                        case TOO_OFEN: {
-                            Log.msg.error(syncCheckRetCodeEnum.getType());
-                            robot.setAlive(false);
-                            break;
-                        }
-                    }
-                } catch (Exception e) {
-                    e.printStackTrace();
-                    Log.msg.error("消息同步错误：{}", e.getMessage());
-                    try {
-                        Thread.sleep(1000);
-                    } catch (InterruptedException ex) {
-                        ex.printStackTrace();
-                    }
-
+        try {
+            //检测是否有新消息
+            SyncCheckResp syncCheckResp = syncCheck(robot);
+            WxRespConstant.SyncCheckRetCodeEnum syncCheckRetCodeEnum = WxRespConstant.SyncCheckRetCodeEnum.getByCode(syncCheckResp.getRetCode());
+            switch (syncCheckRetCodeEnum) {
+                case SUCCESS: {
+                    processSuccessMsg(robot, syncCheckResp.getSelector());
+                    break;
                 }
-
+                case UNKOWN: {
+                    Log.msg.info(syncCheckRetCodeEnum.getType());
+                    return;
+                }
+                case TICKET_ERROR:
+                case PARAM_ERROR:
+                case NOT_LOGIN_WARN:
+                case LOGIN_ENV_ERROR:
+                case TOO_OFEN, LOGIN_OTHERWHERE, LOGIN_OUT: {
+                    Log.msg.error(syncCheckRetCodeEnum.getType());
+                    robot.changeStatus(RobotStatusEnum.IDLE);
+                    break;
+                }
             }
-        };
-        ExecutorServiceUtil.getReceivingExecutorService().execute(runnable);
+        } catch (Exception e) {
+            e.printStackTrace();
+            Log.msg.error("消息同步错误：{}", e.getMessage());
+        }
     }
 
     /**
@@ -242,215 +221,135 @@ public class MessageManager extends ManagerBase {
      */
     public void handleNewMsg(Robot robot, AddMsgList msg) {
         //消息类型封装
-        WxRespConstant.WXReceiveMsgCodeEnum msgType = WxRespConstant.WXReceiveMsgCodeEnum.getByCode(msg.getMsgType());
-        //=============地图消息，特殊处理=============
-        if (msgType == WxRespConstant.WXReceiveMsgCodeEnum.MSGTYPE_TEXT && !StringUtils.isEmpty(msg.getUrl())) {
-            //地图消息 地图消息的发送
-            msg.setMsgType(WxRespConstant.WXReceiveMsgCodeEnum.MSGTYPE_MAP.getCode());
-            msgType = WxRespConstant.WXReceiveMsgCodeEnum.MSGTYPE_MAP;
-        }
+        WxRespConstant.WXReceiveMsgCodeEnum MSG_TYPE = WxRespConstant.WXReceiveMsgCodeEnum.getByCode(msg.getMsgType());
+
         //=============群消息处理=============
         groupMsgFormat(robot, msg);
 
-        msg.setType(msgType);
+        msg.setType(MSG_TYPE);
 
-        //=============如果是当前房间 发送已读通知==============
-        /*if (msg.getFromUserName().equals(ChatPanelContainer.getCurrRoomId())) {
-            ExecutorServiceUtil.getGlobalExecutorService().execute(() -> MessageTools.sendStatusNotify(msg.getFromUserName()));
-        }*/
-
-        //下载资源后缀
-        String ext = null;
-        //下载资源文件名
-        String fileName = msg.getMsgId();
         //存储的消息
-        Message message = new Message();
+        Message message = null;
 
-        switch (msgType) {
-            case MSGTYPE_MAP: {
-                Map<String, Object> map = XmlStreamUtil.toMap(msg.getOriContent());
-                String thumbUrl = WxURLEnum.BASE_URL.getUrl() + msg.getContent();
-                String url = msg.getUrl();
-                String title = map.get("msg.location.attr.poiname").toString();
-                String subTitle = map.get("msg.location.attr.label").toString();
-
-                msg.setPlainText("[地图]" + title);
-                ext = ".gif";
-                //downloadFile(msg, fileName, ext);
-                //message = newMsgToDBMessage(msg);
-                message.setMsgType(WxRespConstant.WXReceiveMsgCodeEnum.MSGTYPE_APP.getCode());
-                message.setAppMsgType(WxRespConstant.WXReceiveMsgCodeOfAppEnum.PICTURE.getType());
-                message.setThumbUrl(msg.getFilePath());
-                message.setUrl(url);
-                message.setTitle(title);
-
-            }
-            break;
-            case MSGTYPE_TEXT:
+        switch (MSG_TYPE) {
+            case MSG_TYPE_TEXT:
                 //消息格式化
                 CommonTools.emojiFormatter(msg);
                 textMsgFormat(robot, msg);
                 //文本消息
                 msg.setPlainText(msg.getContent());
+                message = newMsgToDBMessage(robot, msg);
                 break;
-            case MSGTYPE_IMAGE:
+            case MSG_TYPE_IMAGE:
                 msg.setPlainText("[图片]");
-                ext = ".gif";
-                //存储消息
-                //downloadThumImg(msg, fileName, ext);
-                //downloadFile(msg, fileName, ext);
-                //message = newMsgToDBMessage(msg);
+                message = newMsgToDBMessage(robot, msg);
                 break;
-            case MSGTYPE_VOICE:
-                ext = ".mp3";
+            case MSG_TYPE_VOICE:
                 msg.setPlainText("[语音]");
+                message = newMsgToDBMessage(robot, msg);
                 break;
-            case MSGTYPE_VIDEO:
-            case MSGTYPE_MICROVIDEO:
-                ext = ".mp4";
+            case MSG_TYPE_VIDEO:
+            case MSG_TYPE_MICROVIDEO:
                 msg.setPlainText("[视频]");
-
+                message = newMsgToDBMessage(robot, msg);
                 break;
-            case MSGTYPE_EMOTICON:
+            case MSG_TYPE_EMOTICON:
                 msg.setPlainText("[表情]");
-                ext = ".gif";
+                message = newMsgToDBMessage(robot, msg);
                 break;
-            case MSGTYPE_APP: {
-                Map<String, Object> map = new HashMap<>();
-                try {
-                    map = XmlStreamUtil.toMap(msg.getContent());
-                } catch (Exception e) {
-                    e.printStackTrace();
-                }
-                msg.setContentMap(map);
-                Object desc = map.get("msg.appmsg.des");
-                Object url = map.get("msg.appmsg.url");
-                Object title = map.get("msg.appmsg.title");
-                Object thumbUrl = map.get("msg.appmsg.thumburl");
-                Object sourceIconUrl = map.get("msg.appmsg.weappinfo.weappiconurl");
-                Object sourceName = map.get("msg.appmsg.sourcedisplayname");
-                Object height = map.get("msg.appmsg.appattach.cdnthumbheight");
-                Object width = map.get("msg.appmsg.appattach.cdnthumbwidth");
-
-                switch (WxRespConstant.WXReceiveMsgCodeOfAppEnum.getByCode(msg.getAppMsgType())) {
-                    case LINK:
-                        msg.setPlainText("[链接]" + title);
-                        break;
-                    case FILE:
-                        if (title != null) {
-                            fileName = title.toString();
-                        }
-                        int i = msg.getFileName().lastIndexOf(".");
-                        if (i != -1) {
-                            ext = msg.getFileName().substring(i);
-                        }
-                        msg.setPlainText("[文件]" + title);
-                        break;
-                    default:
-                    case PROGRAM:
-                        msg.setPlainText("[小程序]" + title);
-                        break;
-                    case MUSIC:
-                        msg.setPlainText("[音乐]" + title);
-                    case PICTURE:
-                        sourceName = map.get("msg.appinfo.appname");
-                        ext = ".gif";
-                        msg.setPlainText("[小程序]图片");
-                        break;
-                    case TRANSFER:
-                        msg.setPlainText(desc == null ? "[微信转账]" : desc.toString());
-                        msg.setAppMsgType(WxRespConstant.WXReceiveMsgCodeOfAppEnum.LINK.getType());
-                        break;
-                }
-                message.setTitle(title == null ? null : title.toString());
-                message.setDesc(desc == null ? null : desc.toString());
-                message.setImgWidth(width == null ? null : Integer.parseInt(width.toString()));
-                message.setImgHeight(height == null ? null : Integer.parseInt(height.toString()));
-                message.setThumbUrl(thumbUrl == null ? null : thumbUrl.toString());
-                message.setUrl(url == null ? null : url.toString());
-                message.setSourceIconUrl(sourceIconUrl == null ? null : sourceIconUrl.toString());
-                message.setSourceName(sourceName == null ? null : sourceName.toString());
+            case MSG_TYPE_APP: {
+                msg.setPlainText("[APP]");
+                message = newMsgToDBMessage(robot, msg);
             }
-            break;
-            case MSGTYPE_VOIPMSG:
-                break;
-            case MSGTYPE_VOIPNOTIFY:
-                break;
-            case MSGTYPE_VOIPINVITE:
-                break;
-            case MSGTYPE_LOCATION:
+            case MSG_TYPE_LOCATION:
                 msg.setPlainText("[位置，请在手机上查看]");
                 break;
-            case MSGTYPE_SYS: {
+            case MSG_TYPE_SYS: {
                 msg.setPlainText(msg.getContent());
                 break;
             }
-            case MSGTYPE_STATUSNOTIFY: {
-                break;
-            }
-            case MSGTYPE_SYSNOTICE:
-                break;
-            case MSGTYPE_POSSIBLEFRIEND_MSG:
-                break;
-            case MSGTYPE_VERIFYMSG: {
+            case MSG_TYPE_VERIFYMSG: {
                 msg.setPlainText("[好友申请]");
-                Map<String, Object> map = new HashMap<>();
-                try {
-                    map = XmlStreamUtil.toMap(msg.getContent());
-                } catch (Exception e) {
-                    e.printStackTrace();
-                }
-                Object thumbUrl = map.get("msg.attr.smallheadimgurl");
-                Object headImgUrl = map.get("msg.attr.bigheadimgurl");
-                Object id = map.get("msg.attr.alias");
-                RecommendInfo recommendInfo = msg.getRecommendInfo();
-                message.setContactsNickName(recommendInfo.getNickName());
-                message.setContactsId(id == null ? null : id.toString());
-                message.setContactsProvince(recommendInfo.getProvince());
-                message.setContactsCity(recommendInfo.getCity());
-                message.setContactsSex(recommendInfo.getSex());
-                message.setThumbUrl(thumbUrl == null ? null : thumbUrl.toString());
-                message.setContactsUserName(recommendInfo.getUserName());
-                message.setContactsTicket(recommendInfo.getTicket());
-                message.setContactsHeadImgUrl(headImgUrl == null ? null : headImgUrl.toString());
+                message = newMsgToDBMessage(robot, msg);
                 break;
             }
-            case MSGTYPE_SHARECARD: {
-
+            case MSG_TYPE_SHARECARD: {
                 msg.setPlainText("[名片消息]");
-                MessageTools.setMessageCardField(msg.getContent(), message);
-
+                message = newMsgToDBMessage(robot, msg);
             }
-            break;
-            case MSGTYPE_RECALLED: {
+            case MSG_TYPE_RECALLED: {
                 Map<String, Object> map = XmlStreamUtil.toMap(msg.getContent());
                 msg.setContentMap(map);
                 msg.setPlainText(map.get("sysmsg.revokemsg.replacemsg").toString());
+                message = newMsgToDBMessage(robot, msg);
             }
-            break;
-            case UNKNOWN:
             default:
-                //log.warn(LogUtil.printFromMeg(msg, msgType.getCode()));
-                break;
+
         }
-        if (message.getFromUsername().startsWith("@@") || message.getToUsername().startsWith("@@")) {
-            message.setGroup(true);
-        } else {
-            message.setGroup(false);
-        }
-        //显示的名称
-        if (message.isGroup()) {
-            //如果是群则显示群成员名称
-            message.setPlainName(message.getFromMemberOfGroupDisplayname());
-        } else {
-            message.setPlainName(ContactsTools.getContactDisplayNameByUserName(robot, message.getFromUsername()));
-        }
-        List<MessageHandler> messageHandlers = this.messageHandlerList.get(robot);
-        if (messageHandlers != null) {
-            for (MessageHandler messageHandler : messageHandlers) {
-                messageHandler.handle(message);
+        if (message != null) {
+            String fromUsername = message.getFromUsername();
+            message.setGroup(fromUsername.startsWith("@@") || message.getToUsername().startsWith("@@"));
+            //显示的名称
+            if (message.isGroup()) {
+                //如果是群则显示群成员名称
+                message.setPlainName(message.getFromMemberOfGroupDisplayname());
+            } else {
+                message.setPlainName(ContactsTools.getContactDisplayNameByUserName(robot, fromUsername));
+            }
+            Set<String> recentContacts = robot.getRecentContacts();
+            recentContacts.add(fromUsername);
+            List<MessageHandler> messageHandlers = this.messageHandlerList.get(robot);
+            if (messageHandlers != null) {
+                for (MessageHandler messageHandler : messageHandlers) {
+                    messageHandler.handle(message);
+                }
             }
         }
+    }
+
+    private Message newMsgToDBMessage(Robot robot, AddMsgList msg) {
+        boolean isFromSelf = msg.getFromUserName().endsWith(robot.getUserName());
+        boolean isToSelf = msg.getToUserName().endsWith(robot.getUserName());
+        return Message
+                .builder()
+                .plaintext(msg.getPlainText() == null ? msg.getContent() : msg.getPlainText())
+                .content(msg.getContent())
+                .filePath(msg.getFilePath())
+                .createTime(TimeUtil.formatTimestamp(TimeUtil.nowMills()))
+                .fromNickname(isFromSelf ? robot.getNickName() : ContactsTools.getContactNickNameByUserName(robot, msg.getFromUserName()))
+                .fromRemarkname(isFromSelf ? robot.getNickName() : ContactsTools.getContactRemarkNameByUserName(robot, msg.getFromUserName()))
+                .fromUsername(msg.getFromUserName())
+                .id(UUID.randomUUID().toString().replace("-", ""))
+                .toNickname(isToSelf ? robot.getNickName() : ContactsTools.getContactNickNameByUserName(robot, msg.getToUserName()))
+                .toRemarkname(isToSelf ? robot.getNickName() : ContactsTools.getContactRemarkNameByUserName(robot, msg.getToUserName()))
+                .toUsername(msg.getToUserName())
+                .msgId(msg.getMsgId())
+                .msgType(msg.getMsgType())
+                .isSend(isFromSelf)
+                .appMsgType(msg.getAppMsgType())
+                .msgJson(JSON.toJSONString(msg))
+                .msgDesc(WxRespConstant.WXReceiveMsgCodeEnum.getByCode(msg.getMsgType()).getDesc())
+                .fromMemberOfGroupDisplayname(msg.isGroupMsg() && !msg.getFromUserName().equals(robot.getUserName())
+                        ? ContactsTools.getMemberDisplayNameOfGroup(robot, msg.getFromUserName(), msg.getMemberName()) : null)
+                .fromMemberOfGroupNickname(msg.isGroupMsg() && !msg.getFromUserName().equals(robot.getUserName())
+                        ? ContactsTools.getMemberNickNameOfGroup(robot, msg.getFromUserName(), msg.getMemberName()) : null)
+                .fromMemberOfGroupUsername(msg.isGroupMsg() && !msg.getFromUserName().equals(robot.getUserName())
+                        ? msg.getMemberName() : null)
+                .slavePath(msg.getSlavePath())
+                .response(JSON.toJSONString(WebWXSendMsgResponse.builder()
+                        .BaseResponse(WebWXSendMsgResponse.BaseResponse.builder().Ret(0).build())
+                        .LocalID(msg.getMsgId())
+                        .MsgID(msg.getNewMsgId() + "").build()))
+                .playLength(msg.getPlayLength())
+                .imgHeight(msg.getImgHeight())
+                .imgWidth(msg.getImgWidth())
+                .voiceLength(msg.getVoiceLength())
+                .fileName(msg.getFileName())
+                .fileSize(msg.getFileSize())
+                .contentMap(msg.getContentMap())
+                .messageTime(LocalDateTime.now())
+                .oriContent(msg.getOriContent())
+                .build();
     }
 
     private void groupMsgFormat(Robot robot, AddMsgList msg) {
